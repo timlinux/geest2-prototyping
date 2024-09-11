@@ -23,9 +23,14 @@ pkgs.mkShell {
 
   # Optional: Set up environment variables or commands to run when entering the shell
   shellHook = ''
-    echo "Environment setup for PyQt5 and JSON validation with Python 3.12."
+    echo "GEEST prototyping."
+    echo "./generate_model.py - create the model.json by parsing the geest2.ods spreadsheet"
+    echo "./validate_model.py - parse the model.json and check it complies to the jsonschema"
+    echo "./infer_schema.py - parse the model.json and generate a jsonschema document saved as schema.json"
+    echo "./app.py - view the model.json in a Qt5 tree view"
+    echo "./run.sh - Run all of the above in sequence"
   '';
-
+  # This is how you set an env var in a shell.nix
   QT_QPA_PLATFORM_PLUGIN_PATH="${pkgs.qt5.qtbase.bin}/lib/qt-${pkgs.qt5.qtbase.version}/plugins/platforms";
 }
 
