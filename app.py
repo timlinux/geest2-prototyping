@@ -42,29 +42,28 @@ class JsonTreeModel(QAbstractItemModel):
     """Custom QAbstractItemModel to manage JSON data."""
     def __init__(self, json_data, parent=None):
         super(JsonTreeModel, self).__init__(parent)
-        self.rootItem = JsonTreeItem(["JSON Data", "Status"])
+        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status"])
         self.loadJsonData(json_data)
 
     def loadJsonData(self, json_data):
-        """Load JSON data into the model."""
+        """Load JSON data into the model, only showing dimensions, factors, and layers."""
         self.beginResetModel()
-        self.rootItem = JsonTreeItem(["JSON Data", "Status"])  # Reset root
-        self.addItems(self.rootItem, json_data)
-        self.endResetModel()
+        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status"])  # Reset root
 
-    def addItems(self, parent, data):
-        """Recursively add items to the tree."""
-        if isinstance(data, dict):
-            for key, value in data.items():
-                item = JsonTreeItem([key, "🔴"], parent)
-                parent.appendChild(item)
-                self.addItems(item, value)
-        elif isinstance(data, list):
-            for entry in data:
-                for key, value in entry.items():
-                    item = JsonTreeItem([key, "🔴"], parent)
-                    parent.appendChild(item)
-                    self.addItems(item, value)
+        # Only add dimensions, factors, and layers to the tree
+        for dimension in json_data.get("dimensions", []):
+            dimension_item = JsonTreeItem([dimension["name"], "🔴"], self.rootItem)
+            self.rootItem.appendChild(dimension_item)
+            for factor in dimension.get("factors", []):
+                factor_item = JsonTreeItem([factor["name"], "🔴"], dimension_item)
+                dimension_item.appendChild(factor_item)
+                for layer in factor.get("layers", []):
+                    # Assuming layers are stored as dictionaries with a single key (layer name)
+                    for layer_name, layer_data in layer.items():
+                        layer_item = JsonTreeItem([layer_name, "🔴"], factor_item)
+                        factor_item.appendChild(layer_item)
+
+        self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()):
         if not parent.isValid():
@@ -124,7 +123,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.json_file = json_file
-        self.setWindowTitle("JSON Model Viewer with QAbstractItemModel and QFileSystemWatcher")
+        self.setWindowTitle("JSON Model Viewer with Dimensions, Factors, and Layers")
         layout = QVBoxLayout()
 
         # Load JSON data
@@ -175,15 +174,14 @@ def main():
     cwd = os.getcwd()
     default_json_file = os.path.join(cwd, 'model.json')
 
-    # Check if the default files exist, otherwise prompt for files
-    if not os.path.exists(default_json_file):
+    # Check if model.json exists, otherwise prompt for a JSON file
+    json_file = default_json_file if os.path.exists(default_json_file) else None
+    if not json_file:
         app = QApplication(sys.argv)
         json_file, _ = QFileDialog.getOpenFileName(None, "Open JSON File", cwd, "JSON Files (*.json);;All Files (*)")
         if not json_file:
             QMessageBox.critical(None, "Error", "No JSON file selected!")
             return
-    else:
-        json_file = default_json_file
 
     # Launch the main window
     app = QApplication(sys.argv)
