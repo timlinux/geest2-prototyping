@@ -94,6 +94,49 @@ class JsonTreeModel(QAbstractItemModel):
         item.font_color = color
         self.layoutChanged.emit()
 
+    def clear_layer_weightings(self, factor_item):
+        """Clear all weightings for layers under the given factor."""
+        for i in range(factor_item.childCount()):
+            layer_item = factor_item.child(i)
+            layer_item.setData(2, "0.00")
+        # After clearing, update the factor's total weighting
+        factor_item.setData(2, "0.00")
+        self.update_font_color(factor_item, QColor(Qt.red))
+        self.layoutChanged.emit()
+
+    def auto_assign_layer_weightings(self, factor_item):
+        """Auto-assign weightings evenly across all layers under the factor."""
+        num_layers = factor_item.childCount()
+        if num_layers == 0:
+            return
+        layer_weighting = 1 / num_layers
+        for i in range(num_layers):
+            layer_item = factor_item.child(i)
+            layer_item.setData(2, f"{layer_weighting:.2f}")
+        # Update the factor's total weighting
+        factor_item.setData(2, "1.00")
+        self.update_font_color(factor_item, QColor(Qt.green))
+        self.layoutChanged.emit()
+
+    def add_factor(self, dimension_item):
+        """Add a new factor under the given dimension."""
+        new_factor = JsonTreeItem(["New Factor", "🔴", ""], dimension_item)
+        dimension_item.appendChild(new_factor)
+        self.layoutChanged.emit()
+
+    def add_layer(self, factor_item):
+        """Add a new layer under the given factor."""
+        new_layer = JsonTreeItem(["New Layer", "🔴", "1.00"], factor_item)
+        factor_item.appendChild(new_layer)
+        self.layoutChanged.emit()
+
+    def remove_item(self, item):
+        """Remove the given item from its parent."""
+        parent = item.parent()
+        if parent:
+            parent.childItems.remove(item)
+        self.layoutChanged.emit()
+
     def rowCount(self, parent=QModelIndex()):
         if not parent.isValid():
             parentItem = self.rootItem
@@ -178,28 +221,6 @@ class JsonTreeModel(QAbstractItemModel):
         parentItem = self.rootItem if not parent.isValid() else parent.internalPointer()
         parentItem.childItems.pop(row)
         self.layoutChanged.emit()
-
-    def clear_layer_weightings(self, factor_item):
-        """Clear all layer weightings under a factor."""
-        for i in range(factor_item.childCount()):
-            layer_item = factor_item.child(i)
-            layer_item.setData(2, "0.00")  # Set weighting to 0.00
-        factor_item.setData(2, "0.00")
-        self.update_font_color(factor_item, QColor(Qt.red))  # Set factor font to red (invalid)
-        self.layoutChanged.emit()
-
-    def auto_assign_layer_weightings(self, factor_item):
-        """Auto-assign equal weightings across all layers under a factor."""
-        num_layers = factor_item.childCount()
-        if num_layers == 0:
-            return
-        layer_weighting = 1 / num_layers
-        for i in range(num_layers):
-            layer_item = factor_item.child(i)
-            layer_item.setData(2, f"{layer_weighting:.2f}")  # Evenly distribute weightings
-        factor_item.setData(2, "1.00")
-        self.update_font_color(factor_item, QColor(Qt.green))  # Set factor font to green (valid)
-        self.layoutChanged.emit()        
 
 class CustomTreeView(QTreeView):
     """Custom QTreeView to handle editing and reverting on Escape or focus loss."""
@@ -325,40 +346,57 @@ class MainWindow(QMainWindow):
 
         item = index.internalPointer()
 
-        # Check if item is a factor or layer
+        # Check if item is a dimension, factor, or layer
+        is_dimension = item.parent() is None  # Dimensions have no parent
         is_factor = item.parent() is not None and item.childCount() > 0  # Factors have children
         is_layer = item.parent() is not None and item.childCount() == 0  # Layers are leaf nodes
 
         menu = QMenu(self)
 
-        if is_factor:
-            # Context menu for factors
-            clear_action = QAction("Clear Layer Weightings", self)
-            auto_assign_action = QAction("Auto Assign Layer Weightings", self)
-            add_to_map_action = QAction("Add Factor Layers to Map", self)
+        if is_dimension:
+            # Context menu for dimensions
+            add_factor_action = QAction("Add Factor", self)
+            remove_dimension_action = QAction("Remove Dimension", self)
 
             # Connect actions
-            clear_action.triggered.connect(lambda: self.model.clear_layer_weightings(item))
-            auto_assign_action.triggered.connect(lambda: self.model.auto_assign_layer_weightings(item))
-            add_to_map_action.triggered.connect(lambda: QMessageBox.information(self, "Info", "Feature not implemented yet."))
+            add_factor_action.triggered.connect(lambda: self.model.add_factor(item))
+            remove_dimension_action.triggered.connect(lambda: self.model.remove_item(item))
 
             # Add actions to menu
+            menu.addAction(add_factor_action)
+            menu.addAction(remove_dimension_action)
+
+        elif is_factor:
+            # Context menu for factors
+            add_layer_action = QAction("Add Layer", self)
+            remove_factor_action = QAction("Remove Factor", self)
+            clear_action = QAction("Clear Layer Weightings", self)
+            auto_assign_action = QAction("Auto Assign Layer Weightings", self)
+
+            # Connect actions
+            add_layer_action.triggered.connect(lambda: self.model.add_layer(item))
+            remove_factor_action.triggered.connect(lambda: self.model.remove_item(item))
+            clear_action.triggered.connect(lambda: self.model.clear_layer_weightings(item))
+            auto_assign_action.triggered.connect(lambda: self.model.auto_assign_layer_weightings(item))
+
+            # Add actions to menu
+            menu.addAction(add_layer_action)
+            menu.addAction(remove_factor_action)
             menu.addAction(clear_action)
             menu.addAction(auto_assign_action)
-            menu.addAction(add_to_map_action)
 
         elif is_layer:
             # Context menu for layers
             show_properties_action = QAction("Show Properties", self)
-            balance_weighting_action = QAction("Balance Weighting", self)
+            remove_layer_action = QAction("Remove Layer", self)
 
             # Connect actions
             show_properties_action.triggered.connect(lambda: self.show_layer_properties(item))
-            balance_weighting_action.triggered.connect(lambda: self.model.balance_weighting(item))
+            remove_layer_action.triggered.connect(lambda: self.model.remove_item(item))
 
             # Add actions to menu
             menu.addAction(show_properties_action)
-            menu.addAction(balance_weighting_action)
+            menu.addAction(remove_layer_action)
 
         # Show the menu at the cursor's position
         menu.exec_(self.treeView.viewport().mapToGlobal(position))
@@ -384,7 +422,7 @@ class LayerDetailDialog(QDialog):
         layout.addWidget(heading_label)
 
         # Description for the dialog
-        description_text = QTextEdit(layer_data)
+        description_text = QTextEdit(json.dumps(layer_data, indent=4))  # Convert dict to a formatted string
         description_text.setReadOnly(True)
         layout.addWidget(description_text)
 
