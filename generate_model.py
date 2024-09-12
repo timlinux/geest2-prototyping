@@ -14,9 +14,8 @@ df = pd.read_excel(spreadsheet_path, engine='odf', skiprows=3)  # Skipping to th
 df = df[['DIMENSION', 'FACTOR', 'Layer', 'Source', 'Indicator', 'Status', 'Query', 'Note']]
 
 # Fill NaN values in 'Dimension' and 'Factor' columns to propagate their values downwards for hierarchical grouping
-df['DIMENSION'] = df['DIMENSION'].fillna(method='ffill')
-df['FACTOR'] = df['FACTOR'].fillna(method='ffill')
-
+df['DIMENSION'] = df['DIMENSION'].ffill()
+df['FACTOR'] = df['FACTOR'].ffill()
 # Create a hierarchical JSON structure
 result = {"dimensions": []}
 dimension_map = {}
