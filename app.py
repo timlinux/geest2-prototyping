@@ -7,7 +7,6 @@ from PyQt5.QtWidgets import QApplication, QTreeView, QMainWindow, QVBoxLayout, Q
 from PyQt5.QtCore import QAbstractItemModel, QModelIndex, Qt, QFileSystemWatcher, QPoint, QEvent
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QAbstractItemDelegate
-import qgis
 
 
 class JsonTreeItem:
@@ -49,6 +48,7 @@ class JsonTreeItem:
         if self.parentItem:
             return self.parentItem.childItems.index(self)
         return 0
+
 
 class JsonTreeModel(QAbstractItemModel):
     """Custom QAbstractItemModel to manage JSON data."""
@@ -96,6 +96,27 @@ class JsonTreeModel(QAbstractItemModel):
         """Update the font color of an item."""
         item.font_color = color
         self.layoutChanged.emit()
+
+    def to_json(self):
+        """Convert the tree structure back into a JSON document."""
+        def recurse_tree(item):
+            if item.role == "dimension":
+                return {
+                    "name": item.data(0).lower(),
+                    "factors": [recurse_tree(child) for child in item.childItems]
+                }
+            elif item.role == "factor":
+                return {
+                    "name": item.data(0),
+                    "layers": [recurse_tree(child) for child in item.childItems]
+                }
+            elif item.role == "layer":
+                return {item.data(0): item.data(3)}  # Layer name as key, layer data as value
+
+        json_data = {
+            "dimensions": [recurse_tree(child) for child in self.rootItem.childItems]
+        }
+        return json_data
 
     def clear_layer_weightings(self, factor_item):
         """Clear all weightings for layers under the given factor."""
@@ -225,9 +246,10 @@ class JsonTreeModel(QAbstractItemModel):
         parentItem.childItems.pop(row)
         self.layoutChanged.emit()
 
+
 class CustomTreeView(QTreeView):
     """Custom QTreeView to handle editing and reverting on Escape or focus loss."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_editing_index = None
@@ -262,16 +284,20 @@ class CustomTreeView(QTreeView):
         self.original_value = None
         super().closeEditor(editor, hint)
 
+
 class MainWindow(QMainWindow):
-    def __init__(self, json_file):
+    def __init__(self, json_file=None):
         super().__init__()
 
         self.json_file = json_file
         self.setWindowTitle("JSON Model Viewer with Editable Weightings")
         layout = QVBoxLayout()
 
-        # Load JSON data
-        self.load_json()
+        if json_file:
+            # Load JSON data
+            self.load_json()
+        else:
+            self.json_data = {"dimensions": []}
 
         # Create a CustomTreeView widget to handle editing and reverts
         self.treeView = CustomTreeView()
@@ -309,7 +335,15 @@ class MainWindow(QMainWindow):
         add_dimension_button = QPushButton("Add Dimension")
         add_dimension_button.clicked.connect(self.add_dimension)
 
+        load_json_button = QPushButton("Load JSON")
+        load_json_button.clicked.connect(self.load_json_from_file)
+
+        export_json_button = QPushButton("Export JSON")
+        export_json_button.clicked.connect(self.export_json_to_file)
+
+        button_bar.addWidget(load_json_button)
         button_bar.addWidget(add_dimension_button)
+        button_bar.addWidget(export_json_button)
         button_bar.addStretch()
         button_bar.addWidget(close_button)
         layout.addLayout(button_bar)
@@ -321,21 +355,26 @@ class MainWindow(QMainWindow):
         # Maximize the window on start
         self.showMaximized()
 
-        # Set up QFileSystemWatcher to monitor changes in the JSON file
-        self.file_watcher = QFileSystemWatcher([self.json_file])
-        self.file_watcher.fileChanged.connect(self.on_file_changed)
-
     def load_json(self):
         """Load the JSON data from the file."""
         with open(self.json_file, 'r') as f:
             self.json_data = json.load(f)
 
-    def on_file_changed(self):
-        """Reload the JSON data when the file changes and update the model."""
-        print(f"Detected change in {self.json_file}. Reloading model...")
-        self.load_json()
-        self.model.loadJsonData(self.json_data)
-        self.treeView.expandAll()
+    def load_json_from_file(self):
+        """Prompt the user to load a JSON file and update the tree."""
+        json_file, _ = QFileDialog.getOpenFileName(self, "Open JSON File", os.getcwd(), "JSON Files (*.json);;All Files (*)")
+        if json_file:
+            self.json_file = json_file
+            self.load_json()
+            self.model.loadJsonData(self.json_data)
+            self.treeView.expandAll()
+
+    def export_json_to_file(self):
+        """Export the current tree data to a JSON file."""
+        json_data = self.model.to_json()
+        with open('export.json', 'w') as f:
+            json.dump(json_data, f, indent=4)
+        QMessageBox.information(self, "Export Success", "Tree exported to export.json")
 
     def add_dimension(self):
         """Add a new dimension to the model."""
@@ -408,6 +447,7 @@ class MainWindow(QMainWindow):
         dialog = LayerDetailDialog(layer_name, layer_data, self)
         dialog.exec_()
 
+
 class LayerDetailDialog(QDialog):
     """Dialog to show layer properties."""
     def __init__(self, layer_name, layer_data, parent=None):
@@ -433,6 +473,7 @@ class LayerDetailDialog(QDialog):
 
         self.setLayout(layout)
 
+
 # Main function to run the application
 def main():
     app = QApplication(sys.argv)
@@ -448,14 +489,12 @@ def main():
         if not json_file:
             QMessageBox.critical(None, "Error", "No JSON file selected!")
             return
-
     # Set the application style to "kvantum" after QApplication instance
-    app.setStyle("kvantum")
-
-    # Launch the main window
+    app.setStyle("kvantum")    # Launch the main window
     window = MainWindow(json_file)
     window.show()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
