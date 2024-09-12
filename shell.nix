@@ -10,6 +10,7 @@ pkgs.mkShell {
     pkgs.python312Packages.pyqt5       # Install PyQt5 for the GUI
     pkgs.python312Packages.pandas
     pkgs.python312Packages.odfpy
+    pkgs.python312Packages.debugpy
 
     # Qt dependencies for X11 backend
     pkgs.qt5.qtbase
@@ -22,6 +23,7 @@ pkgs.mkShell {
     pkgs.vscode
     pkgs.qtcreator
     pkgs.qgis
+    pkgs.gum
   ];
 
   # Optional: Set up environment variables or commands to run when entering the shell

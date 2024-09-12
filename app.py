@@ -92,6 +92,37 @@ class JsonTreeModel(QAbstractItemModel):
 
         self.endResetModel()
 
+    def setData(self, index, value, role=Qt.EditRole):
+        """Handle editing of values in the tree."""
+        if role == Qt.EditRole:
+            item = index.internalPointer()
+            column = index.column()
+            
+            # Allow editing for the weighting column (index 2)
+            if column == 2:
+                try:
+                    # Ensure the value is a valid floating-point number
+                    value = float(value)
+                    # Update the weighting value
+                    return item.setData(column, f"{value:.2f}")
+                except ValueError:
+                    # Show an error if the value is not valid
+                    QMessageBox.critical(None, "Invalid Value", "Please enter a valid number for the weighting.")
+                    return False
+
+            # For other columns (like the name), we allow regular editing
+            return item.setData(column, value)
+        return False
+
+    def flags(self, index):
+        """Allow editing of the name and weighting columns."""
+        item = index.internalPointer()
+        if index.column() == 0 or index.column() == 2:
+            # Allow editing for the first column (name) and third column (weighting)
+            return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled
+        return Qt.ItemIsSelectable | Qt.ItemIsEnabled
+
+
     def update_font_color(self, item, color):
         """Update the font color of an item."""
         item.font_color = color
@@ -477,6 +508,16 @@ class LayerDetailDialog(QDialog):
 # Main function to run the application
 def main():
     app = QApplication(sys.argv)
+        
+    # Fetch the value of GEEST_DEBUG from an environment variable
+    debug_mode = int(os.getenv("GEEST_DEBUG", 0))
+    if debug_mode:
+        import multiprocessing  # pylint: disable=import-outside-toplevel
+
+        if multiprocessing.current_process().pid > 1:
+            import debugpy  # pylint: disable=import-outside-toplevel
+            debugpy.listen(("0.0.0.0", 9000))
+            debugpy.wait_for_client()
 
     # Set default JSON path
     cwd = os.getcwd()
