@@ -7,13 +7,16 @@ from PyQt5.QtWidgets import QApplication, QTreeView, QMainWindow, QVBoxLayout, Q
 from PyQt5.QtCore import QAbstractItemModel, QModelIndex, Qt, QFileSystemWatcher, QPoint, QEvent
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QAbstractItemDelegate
+import qgis
+
 
 class JsonTreeItem:
     """A class representing a node in the tree."""
-    def __init__(self, data, parent=None):
+    def __init__(self, data, role, parent=None):
         self.parentItem = parent
         self.itemData = data
         self.childItems = []
+        self.role = role  # New property to store the role of the item
         self.font_color = QColor(Qt.black)  # Default font color
 
     def appendChild(self, item):
@@ -51,23 +54,23 @@ class JsonTreeModel(QAbstractItemModel):
     """Custom QAbstractItemModel to manage JSON data."""
     def __init__(self, json_data, parent=None):
         super().__init__(parent)
-        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"])
+        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"], "root")
         self.loadJsonData(json_data)
         self.original_value = None  # To store the original value before editing
 
     def loadJsonData(self, json_data):
         """Load JSON data into the model, showing dimensions, factors, layers, and weightings."""
         self.beginResetModel()
-        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"])
+        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"], "root")
 
         # Process dimensions, factors, and layers
         for dimension in json_data.get("dimensions", []):
             dimension_name = dimension["name"].title()  # Show dimensions in title case
-            dimension_item = JsonTreeItem([dimension_name, "🔴", ""], self.rootItem)
+            dimension_item = JsonTreeItem([dimension_name, "🔴", ""], "dimension", self.rootItem)
             self.rootItem.appendChild(dimension_item)
 
             for factor in dimension.get("factors", []):
-                factor_item = JsonTreeItem([factor["name"], "🔴", ""], dimension_item)
+                factor_item = JsonTreeItem([factor["name"], "🔴", ""], "factor", dimension_item)
                 dimension_item.appendChild(factor_item)
 
                 num_layers = len(factor.get("layers", []))
@@ -79,7 +82,7 @@ class JsonTreeModel(QAbstractItemModel):
 
                 for layer in factor.get("layers", []):
                     for layer_name, layer_data in layer.items():
-                        layer_item = JsonTreeItem([layer_name, "🔴", f"{layer_weighting:.2f}", layer_data], factor_item)
+                        layer_item = JsonTreeItem([layer_name, "🔴", f"{layer_weighting:.2f}", layer_data], "layer", factor_item)
                         factor_item.appendChild(layer_item)
                         factor_weighting_sum += layer_weighting
 
@@ -120,13 +123,13 @@ class JsonTreeModel(QAbstractItemModel):
 
     def add_factor(self, dimension_item):
         """Add a new factor under the given dimension."""
-        new_factor = JsonTreeItem(["New Factor", "🔴", ""], dimension_item)
+        new_factor = JsonTreeItem(["New Factor", "🔴", ""], "factor", dimension_item)
         dimension_item.appendChild(new_factor)
         self.layoutChanged.emit()
 
     def add_layer(self, factor_item):
         """Add a new layer under the given factor."""
-        new_layer = JsonTreeItem(["New Layer", "🔴", "1.00"], factor_item)
+        new_layer = JsonTreeItem(["New Layer", "🔴", "1.00"], "layer", factor_item)
         factor_item.appendChild(new_layer)
         self.layoutChanged.emit()
 
@@ -212,7 +215,7 @@ class JsonTreeModel(QAbstractItemModel):
 
     def add_dimension(self, name="New Dimension"):
         """Add a new dimension to the root and allow editing."""
-        new_dimension = JsonTreeItem([name, "🔴", ""], self.rootItem)
+        new_dimension = JsonTreeItem([name, "🔴", ""], "dimension", self.rootItem)
         self.rootItem.appendChild(new_dimension)
         self.layoutChanged.emit()
 
@@ -346,14 +349,8 @@ class MainWindow(QMainWindow):
 
         item = index.internalPointer()
 
-        # Check if item is a dimension, factor, or layer
-        is_dimension = item.parent() is None  # Dimensions have no parent
-        is_factor = item.parent() is not None and item.childCount() > 0  # Factors have children
-        is_layer = item.parent() is not None and item.childCount() == 0  # Layers are leaf nodes
-
-        menu = QMenu(self)
-
-        if is_dimension:
+        # Check the role of the item directly from the stored role
+        if item.role == "dimension":
             # Context menu for dimensions
             add_factor_action = QAction("Add Factor", self)
             remove_dimension_action = QAction("Remove Dimension", self)
@@ -363,10 +360,11 @@ class MainWindow(QMainWindow):
             remove_dimension_action.triggered.connect(lambda: self.model.remove_item(item))
 
             # Add actions to menu
+            menu = QMenu(self)
             menu.addAction(add_factor_action)
             menu.addAction(remove_dimension_action)
 
-        elif is_factor:
+        elif item.role == "factor":
             # Context menu for factors
             add_layer_action = QAction("Add Layer", self)
             remove_factor_action = QAction("Remove Factor", self)
@@ -380,12 +378,13 @@ class MainWindow(QMainWindow):
             auto_assign_action.triggered.connect(lambda: self.model.auto_assign_layer_weightings(item))
 
             # Add actions to menu
+            menu = QMenu(self)
             menu.addAction(add_layer_action)
             menu.addAction(remove_factor_action)
             menu.addAction(clear_action)
             menu.addAction(auto_assign_action)
 
-        elif is_layer:
+        elif item.role == "layer":
             # Context menu for layers
             show_properties_action = QAction("Show Properties", self)
             remove_layer_action = QAction("Remove Layer", self)
@@ -395,6 +394,7 @@ class MainWindow(QMainWindow):
             remove_layer_action.triggered.connect(lambda: self.model.remove_item(item))
 
             # Add actions to menu
+            menu = QMenu(self)
             menu.addAction(show_properties_action)
             menu.addAction(remove_layer_action)
 
