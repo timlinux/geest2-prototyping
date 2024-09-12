@@ -21,6 +21,7 @@ pkgs.mkShell {
     pkgs.fontconfig
     pkgs.vscode
     pkgs.qtcreator
+    pkgs.qgis
   ];
 
   # Optional: Set up environment variables or commands to run when entering the shell
@@ -34,5 +35,7 @@ pkgs.mkShell {
   '';
   # This is how you set an env var in a shell.nix
   QT_QPA_PLATFORM_PLUGIN_PATH="${pkgs.qt5.qtbase.bin}/lib/qt-${pkgs.qt5.qtbase.version}/plugins/platforms";
+  # This is how we can run python that needs QGIS libs
+  PYTHONPATH="$PYTHONPATH:${pkgs.qgis}/lib/";
 }
 
