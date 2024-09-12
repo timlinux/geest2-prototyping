@@ -3,9 +3,10 @@
 import sys
 import os
 import json
-from PyQt5.QtWidgets import QApplication, QTreeView, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMessageBox, QHeaderView, QPushButton, QHBoxLayout, QMenu, QAction
-from PyQt5.QtCore import QAbstractItemModel, QModelIndex, Qt, QFileSystemWatcher, QPoint
+from PyQt5.QtWidgets import QApplication, QTreeView, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMessageBox, QHeaderView, QPushButton, QHBoxLayout, QMenu, QAction, QDialog, QLabel, QTextEdit
+from PyQt5.QtCore import QAbstractItemModel, QModelIndex, Qt, QFileSystemWatcher, QPoint, QEvent
 from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import QAbstractItemDelegate
 
 class JsonTreeItem:
     """A class representing a node in the tree."""
@@ -49,9 +50,10 @@ class JsonTreeItem:
 class JsonTreeModel(QAbstractItemModel):
     """Custom QAbstractItemModel to manage JSON data."""
     def __init__(self, json_data, parent=None):
-        super().__init__(parent)  # Corrected initialization
+        super().__init__(parent)
         self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"])
         self.loadJsonData(json_data)
+        self.original_value = None  # To store the original value before editing
 
     def loadJsonData(self, json_data):
         """Load JSON data into the model, showing dimensions, factors, layers, and weightings."""
@@ -87,6 +89,11 @@ class JsonTreeModel(QAbstractItemModel):
 
         self.endResetModel()
 
+    def update_font_color(self, item, color):
+        """Update the font color of an item."""
+        item.font_color = color
+        self.layoutChanged.emit()
+
     def rowCount(self, parent=QModelIndex()):
         if not parent.isValid():
             parentItem = self.rootItem
@@ -111,41 +118,20 @@ class JsonTreeModel(QAbstractItemModel):
         return None
 
     def setData(self, index, value, role=Qt.EditRole):
-        if role == Qt.EditRole and index.column() == 2:
+        if role == Qt.EditRole:
             item = index.internalPointer()
-            try:
-                new_weighting = float(value)
-                item.setData(2, f"{new_weighting:.2f}")
-
-                parent_item = item.parent()
-                if parent_item:
-                    total_weighting = sum(
-                        float(parent_item.child(i).data(2)) if parent_item.child(i).data(2) else 0.0
-                        for i in range(parent_item.childCount())
-                    )
-                    parent_item.setData(2, f"{total_weighting:.2f}")
-                    if total_weighting == 1.0:
-                        self.update_font_color(parent_item, QColor(Qt.green))
-                    else:
-                        self.update_font_color(parent_item, QColor(Qt.red))
-                    self.dataChanged.emit(index, index)
-
-                return True
-            except ValueError:
-                return False
+            return item.setData(index.column(), value)
         return False
 
-    def update_font_color(self, item, color):
-        """Helper method to update the font color for an item."""
-        item.font_color = color  # Update the font color
-        self.dataChanged.emit(self.index(item.row(), 2), self.index(item.row(), 2))  # Emit change signal
-
     def flags(self, index):
-        """Make only layers editable and not dimensions or factors."""
+        """Allow editing and drag/drop reordering of dimensions."""
         item = index.internalPointer()
-        # Only allow editing of layer weightings (not factors or dimensions)
-        if index.column() == 2 and item.parent() and item.parent().parent():  # Layers only
-            return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled
+
+        if index.column() == 0:
+            if item.parentItem is None:  # Top-level dimensions
+                return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
+            else:  # Factors and layers
+                return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled
 
     def index(self, row, column, parent=QModelIndex()):
@@ -181,17 +167,29 @@ class JsonTreeModel(QAbstractItemModel):
             return self.rootItem.data(section)
         return None
 
+    def add_dimension(self, name="New Dimension"):
+        """Add a new dimension to the root and allow editing."""
+        new_dimension = JsonTreeItem([name, "🔴", ""], self.rootItem)
+        self.rootItem.appendChild(new_dimension)
+        self.layoutChanged.emit()
+
+    def removeRow(self, row, parent=QModelIndex()):
+        """Allow removing dimensions."""
+        parentItem = self.rootItem if not parent.isValid() else parent.internalPointer()
+        parentItem.childItems.pop(row)
+        self.layoutChanged.emit()
+
     def clear_layer_weightings(self, factor_item):
         """Clear all layer weightings under a factor."""
         for i in range(factor_item.childCount()):
             layer_item = factor_item.child(i)
             layer_item.setData(2, "0.00")  # Set weighting to 0.00
         factor_item.setData(2, "0.00")
-        self.update_font_color(factor_item, QColor(Qt.red))
-        self.dataChanged.emit(self.index(factor_item.row(), 2), self.index(factor_item.row(), 2))
+        self.update_font_color(factor_item, QColor(Qt.red))  # Set factor font to red (invalid)
+        self.layoutChanged.emit()
 
     def auto_assign_layer_weightings(self, factor_item):
-        """Auto-assign weightings across all layers under a factor."""
+        """Auto-assign equal weightings across all layers under a factor."""
         num_layers = factor_item.childCount()
         if num_layers == 0:
             return
@@ -200,8 +198,45 @@ class JsonTreeModel(QAbstractItemModel):
             layer_item = factor_item.child(i)
             layer_item.setData(2, f"{layer_weighting:.2f}")  # Evenly distribute weightings
         factor_item.setData(2, "1.00")
-        self.update_font_color(factor_item, QColor(Qt.green))
-        self.dataChanged.emit(self.index(factor_item.row(), 2), self.index(factor_item.row(), 2))
+        self.update_font_color(factor_item, QColor(Qt.green))  # Set factor font to green (valid)
+        self.layoutChanged.emit()        
+
+class CustomTreeView(QTreeView):
+    """Custom QTreeView to handle editing and reverting on Escape or focus loss."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_editing_index = None
+
+    def edit(self, index, trigger, event):
+        """Start editing the item at the given index."""
+        self.current_editing_index = index
+        model = self.model()
+        self.original_value = model.data(index, Qt.DisplayRole)  # Store original value before editing
+        return super().edit(index, trigger, event)
+
+    def keyPressEvent(self, event):
+        """Handle Escape key to cancel editing."""
+        if event.key() == Qt.Key_Escape and self.current_editing_index:
+            self.model().setData(self.current_editing_index, self.original_value, Qt.EditRole)
+            self.closeEditor(self.current_editor(), QAbstractItemDelegate.RevertModelCache)
+        else:
+            super().keyPressEvent(event)
+
+    def commitData(self, editor):
+        """Handle commit data, reverting if needed."""
+        if self.current_editing_index:
+            super().commitData(editor)
+            self.current_editing_index = None
+            self.original_value = None
+
+    def closeEditor(self, editor, hint):
+        """Handle closing the editor and reverting the value on Escape or clicking elsewhere."""
+        if hint == QAbstractItemDelegate.RevertModelCache and self.current_editing_index:
+            self.model().setData(self.current_editing_index, self.original_value, Qt.EditRole)
+        self.current_editing_index = None
+        self.original_value = None
+        super().closeEditor(editor, hint)
 
 class MainWindow(QMainWindow):
     def __init__(self, json_file):
@@ -214,14 +249,16 @@ class MainWindow(QMainWindow):
         # Load JSON data
         self.load_json()
 
-        # Create a QTreeView widget
-        self.treeView = QTreeView()
+        # Create a CustomTreeView widget to handle editing and reverts
+        self.treeView = CustomTreeView()
+        self.treeView.setDragDropMode(QTreeView.InternalMove)
+        self.treeView.setDefaultDropAction(Qt.MoveAction)
 
         # Create a model for the QTreeView using custom JsonTreeModel
         self.model = JsonTreeModel(self.json_data)
         self.treeView.setModel(self.model)
 
-        self.treeView.setEditTriggers(QTreeView.AllEditTriggers)
+        self.treeView.setEditTriggers(QTreeView.DoubleClicked)  # Only allow editing on double-click
 
         # Enable custom context menu
         self.treeView.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -240,10 +277,15 @@ class MainWindow(QMainWindow):
         # Set layout
         layout.addWidget(self.treeView)
 
-        # Add a button bar at the bottom with a Close button
+        # Add a button bar at the bottom with a Close button and Add Dimension button
         button_bar = QHBoxLayout()
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.close)
+
+        add_dimension_button = QPushButton("Add Dimension")
+        add_dimension_button.clicked.connect(self.add_dimension)
+
+        button_bar.addWidget(add_dimension_button)
         button_bar.addStretch()
         button_bar.addWidget(close_button)
         layout.addLayout(button_bar)
@@ -271,6 +313,10 @@ class MainWindow(QMainWindow):
         self.model.loadJsonData(self.json_data)
         self.treeView.expandAll()
 
+    def add_dimension(self):
+        """Add a new dimension to the model."""
+        self.model.add_dimension()
+
     def open_context_menu(self, position: QPoint):
         """Handle right-click context menu."""
         index = self.treeView.indexAt(position)
@@ -279,31 +325,75 @@ class MainWindow(QMainWindow):
 
         item = index.internalPointer()
 
-        # Ensure we're targeting factor items only
-        if item.parent() is None or item.parent().parent() is None:
-            return  # Not a layer or factor
+        # Check if item is a factor or layer
+        is_factor = item.parent() is not None and item.childCount() > 0  # Factors have children
+        is_layer = item.parent() is not None and item.childCount() == 0  # Layers are leaf nodes
 
-        # Create the context menu
         menu = QMenu(self)
 
-        # Add menu actions
-        clear_action = QAction("Clear Layer Weightings", self)
-        auto_assign_action = QAction("Auto Assign Layer Weightings", self)
-        add_to_map_action = QAction("Add Factor Layers to Map", self)
+        if is_factor:
+            # Context menu for factors
+            clear_action = QAction("Clear Layer Weightings", self)
+            auto_assign_action = QAction("Auto Assign Layer Weightings", self)
+            add_to_map_action = QAction("Add Factor Layers to Map", self)
 
-        # Connect actions
-        clear_action.triggered.connect(lambda: self.model.clear_layer_weightings(item.parent()))
-        auto_assign_action.triggered.connect(lambda: self.model.auto_assign_layer_weightings(item.parent()))
-        # Placeholder for "Add Factor Layers to Map"
-        add_to_map_action.triggered.connect(lambda: QMessageBox.information(self, "Info", "Feature not implemented yet."))
+            # Connect actions
+            clear_action.triggered.connect(lambda: self.model.clear_layer_weightings(item))
+            auto_assign_action.triggered.connect(lambda: self.model.auto_assign_layer_weightings(item))
+            add_to_map_action.triggered.connect(lambda: QMessageBox.information(self, "Info", "Feature not implemented yet."))
 
-        # Add actions to menu
-        menu.addAction(clear_action)
-        menu.addAction(auto_assign_action)
-        menu.addAction(add_to_map_action)
+            # Add actions to menu
+            menu.addAction(clear_action)
+            menu.addAction(auto_assign_action)
+            menu.addAction(add_to_map_action)
+
+        elif is_layer:
+            # Context menu for layers
+            show_properties_action = QAction("Show Properties", self)
+            balance_weighting_action = QAction("Balance Weighting", self)
+
+            # Connect actions
+            show_properties_action.triggered.connect(lambda: self.show_layer_properties(item))
+            balance_weighting_action.triggered.connect(lambda: self.model.balance_weighting(item))
+
+            # Add actions to menu
+            menu.addAction(show_properties_action)
+            menu.addAction(balance_weighting_action)
 
         # Show the menu at the cursor's position
         menu.exec_(self.treeView.viewport().mapToGlobal(position))
+
+    def show_layer_properties(self, item):
+        """Open a dialog showing layer properties."""
+        layer_name = item.data(0)
+        layer_data = item.data(3)  # Assumes layer details are stored in position 3
+        dialog = LayerDetailDialog(layer_name, layer_data, self)
+        dialog.exec_()
+
+class LayerDetailDialog(QDialog):
+    """Dialog to show layer properties."""
+    def __init__(self, layer_name, layer_data, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle(layer_name)
+
+        layout = QVBoxLayout()
+
+        # Heading for the dialog
+        heading_label = QLabel(layer_name)
+        layout.addWidget(heading_label)
+
+        # Description for the dialog
+        description_text = QTextEdit(layer_data)
+        description_text.setReadOnly(True)
+        layout.addWidget(description_text)
+
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.close)
+        layout.addWidget(close_button)
+
+        self.setLayout(layout)
 
 # Main function to run the application
 def main():
@@ -331,4 +421,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

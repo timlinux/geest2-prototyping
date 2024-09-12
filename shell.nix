@@ -19,6 +19,8 @@ pkgs.mkShell {
     #pkgs.libxkbcommon-x11
     pkgs.freetype
     pkgs.fontconfig
+    pkgs.vscode
+    pkgs.qtcreator
   ];
 
   # Optional: Set up environment variables or commands to run when entering the shell
