@@ -145,7 +145,9 @@ class JsonTreeModel(QAbstractItemModel):
                     "layers": [recurse_tree(child) for child in item.childItems]
                 }
             elif item.role == "layer":
-                return {item.data(0): item.data(3)}  # Layer name as key, layer data as value
+                # TODO: Add more layer details here
+                # like weighting etc.
+                return {"layer": item.data(0)}  # Layer name as key, layer data as value
 
         json_data = {
             "dimensions": [recurse_tree(child) for child in self.rootItem.childItems]
