@@ -25,6 +25,7 @@ pkgs.mkShell {
     pkgs.python312Packages.debugpy
 
     # Qt dependencies for X11 backend
+    pkgs.qt5.full
     pkgs.qt5.qtbase
     pkgs.qt5.qtx11extras
     pkgs.xorg.libX11
