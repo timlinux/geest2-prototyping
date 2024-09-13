@@ -14,6 +14,8 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QPushButton,
     QHBoxLayout,
+    QTableWidget, 
+    QTableWidgetItem,
     QMenu,
     QAction,
     QDialog,
@@ -576,7 +578,7 @@ class MainWindow(QMainWindow):
     def show_layer_properties(self, item):
         """Open a dialog showing layer properties."""
         layer_name = item.data(0)
-        layer_data = item.data(3)  # Assumes layer details are stored in position 3
+        layer_data = item.data(4)  # The 4th column stores the whole layer data dict
         dialog = LayerDetailDialog(layer_name, layer_data, self)
         dialog.exec_()
 
@@ -597,10 +599,36 @@ class LayerDetailDialog(QDialog):
 
         # Description for the dialog
         description_text = QTextEdit(
-            json.dumps(layer_data, indent=4)
-        )  # Convert dict to a formatted string
+            layer_data["indicator"] if "indicator" in layer_data else "")
         description_text.setReadOnly(True)
         layout.addWidget(description_text)
+
+        # Create the QTableWidget
+        table = QTableWidget()
+        table.setColumnCount(2)  # Two columns (Key and Value)
+        table.setHorizontalHeaderLabels(["Key", "Value"])
+
+        # Set the number of rows equal to the number of key-value pairs
+        table.setRowCount(len(layer_data))
+
+        # Populate the table with key-value pairs
+        for row, (key, value) in enumerate(layer_data.items()):
+            # Column 1: Key (read-only)
+            key_item = QTableWidgetItem(str(key))
+            key_item.setFlags(key_item.flags() & ~Qt.ItemIsEditable)  # Make it read-only
+            table.setItem(row, 0, key_item)
+            
+            # Column 2: Value (editable)
+            value_item = QTableWidgetItem(str(value))
+            table.setItem(row, 1, value_item)
+
+        # Set column resize mode to stretch to fill the layout
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # Key column
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # Value column
+
+        # Add the table to the layout
+        layout.addWidget(table)
 
         # Close button
         close_button = QPushButton("Close")
