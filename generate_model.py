@@ -26,8 +26,8 @@ for _, row in df.iterrows():
     factor = row['FACTOR']
     layer_data = {
         "layer": row['Layer'],
-        'Text': row['Source'] if not pd.isna(row['Source']) else "",, 
-        'Default Weighting': row['Default Weighting'] if not pd.isna(row['Default Weighting']) else "",,	
+        'Text': row['Source'] if not pd.isna(row['Source']) else "",
+        'Default Weighting': row['Default Weighting'] if not pd.isna(row['Default Weighting']) else "",	
         'Use Aggregate': row['Use Aggregate'] if not pd.isna(row['Use Aggregate']) else "",
         'Default Index Score': row['Default Index Score'] if not pd.isna(row['Default Index Score']) else "",
         'Index Score': row['Index Score'] if not pd.isna(row['Index Score']) else "",
@@ -46,9 +46,7 @@ for _, row in df.iterrows():
         'Use Mode of Travel': row['Use Mode of Travel'] if not pd.isna(row['Use Mode of Travel']) else "",        
         "source": row['Source'] if not pd.isna(row['Source']) else "",
         "indicator": row['Indicator'] if not pd.isna(row['Indicator']) else "",
-        "status": row['Status'] if not pd.isna(row['Status']) else "",
-        "query": row['Query'] if not pd.isna(row['Query']) else "",
-        "note": row['Note'] if not pd.isna(row['Note']) else ""
+        "query": row['Query'] if not pd.isna(row['Query']) else ""
     }
 
     # If the dimension doesn't exist yet, create it

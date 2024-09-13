@@ -463,8 +463,8 @@ class MainWindow(QMainWindow):
 
         elif item.role == "layer":
             # Context menu for layers
-            show_properties_action = QAction("Show Properties", self)
-            remove_layer_action = QAction("Remove Layer", self)
+            show_properties_action = QAction("🔘Show Properties", self)
+            remove_layer_action = QAction("❌ Remove Layer", self)
 
             # Connect actions
             show_properties_action.triggered.connect(lambda: self.show_layer_properties(item))
