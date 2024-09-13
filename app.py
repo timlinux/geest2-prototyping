@@ -3,14 +3,38 @@
 import sys
 import os
 import json
-from PyQt5.QtWidgets import QApplication, QTreeView, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMessageBox, QHeaderView, QPushButton, QHBoxLayout, QMenu, QAction, QDialog, QLabel, QTextEdit
-from PyQt5.QtCore import QAbstractItemModel, QModelIndex, Qt, QFileSystemWatcher, QPoint, QEvent
+from PyQt5.QtWidgets import (
+    QApplication,
+    QTreeView,
+    QMainWindow,
+    QVBoxLayout,
+    QWidget,
+    QFileDialog,
+    QMessageBox,
+    QHeaderView,
+    QPushButton,
+    QHBoxLayout,
+    QMenu,
+    QAction,
+    QDialog,
+    QLabel,
+    QTextEdit,
+)
+from PyQt5.QtCore import (
+    QAbstractItemModel,
+    QModelIndex,
+    Qt,
+    QFileSystemWatcher,
+    QPoint,
+    QEvent,
+)
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QAbstractItemDelegate
 
 
 class JsonTreeItem:
     """A class representing a node in the tree."""
+
     def __init__(self, data, role, parent=None):
         self.parentItem = parent
         self.itemData = data
@@ -52,6 +76,7 @@ class JsonTreeItem:
 
 class JsonTreeModel(QAbstractItemModel):
     """Custom QAbstractItemModel to manage JSON data."""
+
     def __init__(self, json_data, parent=None):
         super().__init__(parent)
         self.rootItem = JsonTreeItem(["GEEST2", "Status", "Weight"], "root")
@@ -66,11 +91,15 @@ class JsonTreeModel(QAbstractItemModel):
         # Process dimensions, factors, and layers
         for dimension in json_data.get("dimensions", []):
             dimension_name = dimension["name"].title()  # Show dimensions in title case
-            dimension_item = JsonTreeItem([dimension_name, "🔴", ""], "dimension", self.rootItem)
+            dimension_item = JsonTreeItem(
+                [dimension_name, "🔴", ""], "dimension", self.rootItem
+            )
             self.rootItem.appendChild(dimension_item)
 
             for factor in dimension.get("factors", []):
-                factor_item = JsonTreeItem([factor["name"], "🔴", ""], "factor", dimension_item)
+                factor_item = JsonTreeItem(
+                    [factor["name"], "🔴", ""], "factor", dimension_item
+                )
                 dimension_item.appendChild(factor_item)
 
                 num_layers = len(factor.get("layers", []))
@@ -85,13 +114,23 @@ class JsonTreeModel(QAbstractItemModel):
                         weight = layer.get("weighting", "")
                     except:
                         weight = 0.0
-                    layer_item = JsonTreeItem([layer["layer"], "🔴", f"{layer_weighting:.2f}", weight], "layer", factor_item)
+                    layer_item = JsonTreeItem(
+                        # We store the whole json layer object in the last column
+                        # so that we can pull out any of the additional properties
+                        # from it later
+                        [layer["layer"], "🔴", f"{layer_weighting:.2f}", weight, layer],
+                        "layer",
+                        factor_item,
+                    )
                     factor_item.appendChild(layer_item)
                     factor_weighting_sum += layer_weighting
 
                 # Set the factor's total weighting
                 factor_item.setData(2, f"{factor_weighting_sum:.2f}")
-                self.update_font_color(factor_item, QColor(Qt.green if factor_weighting_sum == 1.0 else Qt.red))
+                self.update_font_color(
+                    factor_item,
+                    QColor(Qt.green if factor_weighting_sum == 1.0 else Qt.red),
+                )
 
         self.endResetModel()
 
@@ -100,7 +139,7 @@ class JsonTreeModel(QAbstractItemModel):
         if role == Qt.EditRole:
             item = index.internalPointer()
             column = index.column()
-            
+
             # Allow editing for the weighting column (index 2)
             if column == 2:
                 try:
@@ -110,7 +149,11 @@ class JsonTreeModel(QAbstractItemModel):
                     return item.setData(column, f"{value:.2f}")
                 except ValueError:
                     # Show an error if the value is not valid
-                    QMessageBox.critical(None, "Invalid Value", "Please enter a valid number for the weighting.")
+                    QMessageBox.critical(
+                        None,
+                        "Invalid Value",
+                        "Please enter a valid number for the weighting.",
+                    )
                     return False
 
             # For other columns (like the name), we allow regular editing
@@ -125,7 +168,6 @@ class JsonTreeModel(QAbstractItemModel):
             return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled
 
-
     def update_font_color(self, item, color):
         """Update the font color of an item."""
         item.font_color = color
@@ -133,21 +175,45 @@ class JsonTreeModel(QAbstractItemModel):
 
     def to_json(self):
         """Convert the tree structure back into a JSON document."""
+
         def recurse_tree(item):
             if item.role == "dimension":
                 return {
                     "name": item.data(0).lower(),
-                    "factors": [recurse_tree(child) for child in item.childItems]
+                    "factors": [recurse_tree(child) for child in item.childItems],
                 }
             elif item.role == "factor":
                 return {
                     "name": item.data(0),
-                    "layers": [recurse_tree(child) for child in item.childItems]
+                    "layers": [recurse_tree(child) for child in item.childItems],
                 }
             elif item.role == "layer":
                 # TODO: Add more layer details here
                 # like weighting etc.
-                return {"layer": item.data(0)}  # Layer name as key, layer data as value
+                return {
+                    "layer": item.data(0),
+                    "Text": item.data(4)["Text"],
+                    "Default Weighting": item.data(4)["Default Weighting"],
+                    "Use Aggregate": item.data(4)["Use Aggregate"],
+                    "Default Index Score": item.data(4)["Default Index Score"],
+                    "Index Score": item.data(4)["Index Score"],
+                    "Use default Idex Score": item.data(4)["Use default Idex Score"],
+                    "Rasterise Raster": item.data(4)["Rasterise Raster"],
+                    "Rasterise Polygon": item.data(4)["Rasterise Polygon"],
+                    "Rasterise Polyline": item.data(4)["Rasterise Polyline"],
+                    "Rasterise Point": item.data(4)["Rasterise Point"],
+                    "Default Buffer Distances": item.data(4)["Default Buffer Distances"],
+                    "Use Buffer point": item.data(4)["Use Buffer point"],
+                    "Default pixel": item.data(4)["Default pixel"],
+                    "Use Create Grid": item.data(4)["Use Create Grid"],
+                    "Default Mode": item.data(4)["Default Mode"],
+                    "Default Measurement": item.data(4)["Default Measurement"],
+                    "Default Increments": item.data(4)["Default Increments"],
+                    "Use Mode of Travel": item.data(4)["Use Mode of Travel"],
+                    "source": item.data(4)["source"],
+                    "indicator": item.data(4)["indicator"],
+                    "query": item.data(4)["query"],
+                }
 
         json_data = {
             "dimensions": [recurse_tree(child) for child in self.rootItem.childItems]
@@ -232,7 +298,13 @@ class JsonTreeModel(QAbstractItemModel):
 
         if index.column() == 0:
             if item.parentItem is None:  # Top-level dimensions
-                return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
+                return (
+                    Qt.ItemIsSelectable
+                    | Qt.ItemIsEditable
+                    | Qt.ItemIsEnabled
+                    | Qt.ItemIsDragEnabled
+                    | Qt.ItemIsDropEnabled
+                )
             else:  # Factors and layers
                 return Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled
@@ -294,15 +366,21 @@ class CustomTreeView(QTreeView):
         """Start editing the item at the given index."""
         self.current_editing_index = index
         model = self.model()
-        self.original_value = model.data(index, Qt.DisplayRole)  # Store original value before editing
+        self.original_value = model.data(
+            index, Qt.DisplayRole
+        )  # Store original value before editing
         return super().edit(index, trigger, event)
 
     def keyPressEvent(self, event):
         """Handle Escape key to cancel editing."""
         if event.key() == Qt.Key_Escape and self.current_editing_index:
-            self.model().setData(self.current_editing_index, self.original_value, Qt.EditRole)
+            self.model().setData(
+                self.current_editing_index, self.original_value, Qt.EditRole
+            )
             if self.hasCurrentEditor():
-                self.closeEditor(self.current_editor(), QAbstractItemDelegate.RevertModelCache)
+                self.closeEditor(
+                    self.current_editor(), QAbstractItemDelegate.RevertModelCache
+                )
         else:
             super().keyPressEvent(event)
 
@@ -315,8 +393,13 @@ class CustomTreeView(QTreeView):
 
     def closeEditor(self, editor, hint):
         """Handle closing the editor and reverting the value on Escape or clicking elsewhere."""
-        if hint == QAbstractItemDelegate.RevertModelCache and self.current_editing_index:
-            self.model().setData(self.current_editing_index, self.original_value, Qt.EditRole)
+        if (
+            hint == QAbstractItemDelegate.RevertModelCache
+            and self.current_editing_index
+        ):
+            self.model().setData(
+                self.current_editing_index, self.original_value, Qt.EditRole
+            )
         self.current_editing_index = None
         self.original_value = None
         super().closeEditor(editor, hint)
@@ -345,7 +428,9 @@ class MainWindow(QMainWindow):
         self.model = JsonTreeModel(self.json_data)
         self.treeView.setModel(self.model)
 
-        self.treeView.setEditTriggers(QTreeView.DoubleClicked)  # Only allow editing on double-click
+        self.treeView.setEditTriggers(
+            QTreeView.DoubleClicked
+        )  # Only allow editing on double-click
 
         # Enable custom context menu
         self.treeView.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -395,12 +480,14 @@ class MainWindow(QMainWindow):
 
     def load_json(self):
         """Load the JSON data from the file."""
-        with open(self.json_file, 'r') as f:
+        with open(self.json_file, "r") as f:
             self.json_data = json.load(f)
 
     def load_json_from_file(self):
         """Prompt the user to load a JSON file and update the tree."""
-        json_file, _ = QFileDialog.getOpenFileName(self, "Open JSON File", os.getcwd(), "JSON Files (*.json);;All Files (*)")
+        json_file, _ = QFileDialog.getOpenFileName(
+            self, "Open JSON File", os.getcwd(), "JSON Files (*.json);;All Files (*)"
+        )
         if json_file:
             self.json_file = json_file
             self.load_json()
@@ -410,7 +497,7 @@ class MainWindow(QMainWindow):
     def export_json_to_file(self):
         """Export the current tree data to a JSON file."""
         json_data = self.model.to_json()
-        with open('export.json', 'w') as f:
+        with open("export.json", "w") as f:
             json.dump(json_data, f, indent=4)
         QMessageBox.information(self, "Export Success", "Tree exported to export.json")
 
@@ -434,7 +521,9 @@ class MainWindow(QMainWindow):
 
             # Connect actions
             add_factor_action.triggered.connect(lambda: self.model.add_factor(item))
-            remove_dimension_action.triggered.connect(lambda: self.model.remove_item(item))
+            remove_dimension_action.triggered.connect(
+                lambda: self.model.remove_item(item)
+            )
 
             # Add actions to menu
             menu = QMenu(self)
@@ -451,8 +540,12 @@ class MainWindow(QMainWindow):
             # Connect actions
             add_layer_action.triggered.connect(lambda: self.model.add_layer(item))
             remove_factor_action.triggered.connect(lambda: self.model.remove_item(item))
-            clear_action.triggered.connect(lambda: self.model.clear_layer_weightings(item))
-            auto_assign_action.triggered.connect(lambda: self.model.auto_assign_layer_weightings(item))
+            clear_action.triggered.connect(
+                lambda: self.model.clear_layer_weightings(item)
+            )
+            auto_assign_action.triggered.connect(
+                lambda: self.model.auto_assign_layer_weightings(item)
+            )
 
             # Add actions to menu
             menu = QMenu(self)
@@ -463,11 +556,13 @@ class MainWindow(QMainWindow):
 
         elif item.role == "layer":
             # Context menu for layers
-            show_properties_action = QAction("🔘Show Properties", self)
+            show_properties_action = QAction("🔘 Show Properties", self)
             remove_layer_action = QAction("❌ Remove Layer", self)
 
             # Connect actions
-            show_properties_action.triggered.connect(lambda: self.show_layer_properties(item))
+            show_properties_action.triggered.connect(
+                lambda: self.show_layer_properties(item)
+            )
             remove_layer_action.triggered.connect(lambda: self.model.remove_item(item))
 
             # Add actions to menu
@@ -488,6 +583,7 @@ class MainWindow(QMainWindow):
 
 class LayerDetailDialog(QDialog):
     """Dialog to show layer properties."""
+
     def __init__(self, layer_name, layer_data, parent=None):
         super().__init__(parent)
 
@@ -500,7 +596,9 @@ class LayerDetailDialog(QDialog):
         layout.addWidget(heading_label)
 
         # Description for the dialog
-        description_text = QTextEdit(json.dumps(layer_data, indent=4))  # Convert dict to a formatted string
+        description_text = QTextEdit(
+            json.dumps(layer_data, indent=4)
+        )  # Convert dict to a formatted string
         description_text.setReadOnly(True)
         layout.addWidget(description_text)
 
@@ -515,7 +613,7 @@ class LayerDetailDialog(QDialog):
 # Main function to run the application
 def main():
     app = QApplication(sys.argv)
-        
+
     # Fetch the value of GEEST_DEBUG from an environment variable
     debug_mode = int(os.getenv("GEEST_DEBUG", 0))
     if debug_mode:
@@ -523,22 +621,25 @@ def main():
 
         if multiprocessing.current_process().pid > 1:
             import debugpy  # pylint: disable=import-outside-toplevel
+
             debugpy.listen(("0.0.0.0", 9000))
             debugpy.wait_for_client()
 
     # Set default JSON path
     cwd = os.getcwd()
-    default_json_file = os.path.join(cwd, 'model.json')
+    default_json_file = os.path.join(cwd, "model.json")
 
     # Check if model.json exists, otherwise prompt for a JSON file
     json_file = default_json_file if os.path.exists(default_json_file) else None
     if not json_file:
-        json_file, _ = QFileDialog.getOpenFileName(None, "Open JSON File", cwd, "JSON Files (*.json);;All Files (*)")
+        json_file, _ = QFileDialog.getOpenFileName(
+            None, "Open JSON File", cwd, "JSON Files (*.json);;All Files (*)"
+        )
         if not json_file:
             QMessageBox.critical(None, "Error", "No JSON file selected!")
             return
     # Set the application style to "kvantum" after QApplication instance
-    app.setStyle("kvantum")    # Launch the main window
+    app.setStyle("kvantum")  # Launch the main window
     window = MainWindow(json_file)
     window.show()
     sys.exit(app.exec_())
