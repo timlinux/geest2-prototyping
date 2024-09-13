@@ -4,3 +4,6 @@ model.json
 schema.json
 .vscode-extensions
 .venv
+.~*
+app2.py
+export.json
