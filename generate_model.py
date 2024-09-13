@@ -53,9 +53,9 @@ for _, row in df.iterrows():
 
     # Add layer data to the current factor
     layer_name = row['Layer']
-    factor_map[factor]["layers"].append({
-        layer_name: layer_data
-    })
+    factor_map[factor]["layers"].append(
+        layer_data
+    )
 
 # Save the generated JSON data to a file
 output_json_path = 'model.json'  # Save the output to data.json in the current directory

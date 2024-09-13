@@ -81,10 +81,13 @@ class JsonTreeModel(QAbstractItemModel):
                 factor_weighting_sum = 0.0
 
                 for layer in factor.get("layers", []):
-                    for layer_name, layer_data in layer.items():
-                        layer_item = JsonTreeItem([layer_name, "🔴", f"{layer_weighting:.2f}", layer_data], "layer", factor_item)
-                        factor_item.appendChild(layer_item)
-                        factor_weighting_sum += layer_weighting
+                    try:
+                        weight = layer.get("weighting", "")
+                    except:
+                        weight = 0.0
+                    layer_item = JsonTreeItem([layer["layer"], "🔴", f"{layer_weighting:.2f}", weight], "layer", factor_item)
+                    factor_item.appendChild(layer_item)
+                    factor_weighting_sum += layer_weighting
 
                 # Set the factor's total weighting
                 factor_item.setData(2, f"{factor_weighting_sum:.2f}")
