@@ -15,7 +15,7 @@ class JsonTreeItem:
         self.parentItem = parent
         self.itemData = data
         self.childItems = []
-        self.role = role  # New property to store the role of the item
+        self.role = role  # Stores whether an item is a dimension, factor, or layer
         self.font_color = QColor(Qt.black)  # Default font color
 
     def appendChild(self, item):
@@ -54,14 +54,14 @@ class JsonTreeModel(QAbstractItemModel):
     """Custom QAbstractItemModel to manage JSON data."""
     def __init__(self, json_data, parent=None):
         super().__init__(parent)
-        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"], "root")
+        self.rootItem = JsonTreeItem(["GEEST2", "Status", "Weight"], "root")
         self.loadJsonData(json_data)
         self.original_value = None  # To store the original value before editing
 
     def loadJsonData(self, json_data):
         """Load JSON data into the model, showing dimensions, factors, layers, and weightings."""
         self.beginResetModel()
-        self.rootItem = JsonTreeItem(["Dimension/Factor/Layer", "Status", "Weighting"], "root")
+        self.rootItem = JsonTreeItem(["GEEST2", "Status", "Weight"], "root")
 
         # Process dimensions, factors, and layers
         for dimension in json_data.get("dimensions", []):
@@ -354,7 +354,7 @@ class MainWindow(QMainWindow):
 
         # Expand the first column to use the remaining space and resize with the dialog
         self.treeView.header().setSectionResizeMode(0, QHeaderView.Stretch)
-
+        self.treeView.header().setStretchLastSection(False)
         # Set layout
         layout.addWidget(self.treeView)
 
@@ -363,17 +363,18 @@ class MainWindow(QMainWindow):
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.close)
 
-        add_dimension_button = QPushButton("Add Dimension")
+        add_dimension_button = QPushButton("⭐️ Add Dimension")
         add_dimension_button.clicked.connect(self.add_dimension)
 
-        load_json_button = QPushButton("Load JSON")
+        load_json_button = QPushButton("📂 Load JSON")
         load_json_button.clicked.connect(self.load_json_from_file)
 
-        export_json_button = QPushButton("Export JSON")
+        export_json_button = QPushButton("🫙 Export JSON")
         export_json_button.clicked.connect(self.export_json_to_file)
 
-        button_bar.addWidget(load_json_button)
         button_bar.addWidget(add_dimension_button)
+        button_bar.addStretch()
+        button_bar.addWidget(load_json_button)
         button_bar.addWidget(export_json_button)
         button_bar.addStretch()
         button_bar.addWidget(close_button)
