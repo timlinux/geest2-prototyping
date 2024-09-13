@@ -301,7 +301,8 @@ class CustomTreeView(QTreeView):
         """Handle Escape key to cancel editing."""
         if event.key() == Qt.Key_Escape and self.current_editing_index:
             self.model().setData(self.current_editing_index, self.original_value, Qt.EditRole)
-            self.closeEditor(self.current_editor(), QAbstractItemDelegate.RevertModelCache)
+            if self.hasCurrentEditor():
+                self.closeEditor(self.current_editor(), QAbstractItemDelegate.RevertModelCache)
         else:
             super().keyPressEvent(event)
 
