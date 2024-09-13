@@ -30,6 +30,7 @@ from PyQt5.QtCore import (
     QPoint,
     QEvent,
 )
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QAbstractItemDelegate
 
@@ -585,7 +586,10 @@ class MainWindow(QMainWindow):
 
 class LayerDetailDialog(QDialog):
     """Dialog to show layer properties."""
-
+    
+    # Signal to emit the updated data as a dictionary
+    dataUpdated = pyqtSignal(dict)
+    
     def __init__(self, layer_name, layer_data, parent=None):
         super().__init__(parent)
 
@@ -604,39 +608,53 @@ class LayerDetailDialog(QDialog):
         layout.addWidget(description_text)
 
         # Create the QTableWidget
-        table = QTableWidget()
-        table.setColumnCount(2)  # Two columns (Key and Value)
-        table.setHorizontalHeaderLabels(["Key", "Value"])
+        self.table = QTableWidget()
+        self.table.setColumnCount(2)  # Two columns (Key and Value)
+        self.table.setHorizontalHeaderLabels(["Key", "Value"])
 
         # Set the number of rows equal to the number of key-value pairs
-        table.setRowCount(len(layer_data))
+        self.table.setRowCount(len(layer_data))
 
         # Populate the table with key-value pairs
         for row, (key, value) in enumerate(layer_data.items()):
             # Column 1: Key (read-only)
             key_item = QTableWidgetItem(str(key))
             key_item.setFlags(key_item.flags() & ~Qt.ItemIsEditable)  # Make it read-only
-            table.setItem(row, 0, key_item)
+            self.table.setItem(row, 0, key_item)
             
             # Column 2: Value (editable)
             value_item = QTableWidgetItem(str(value))
-            table.setItem(row, 1, value_item)
+            self.table.setItem(row, 1, value_item)
 
         # Set column resize mode to stretch to fill the layout
-        header = table.horizontalHeader()
+        header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)  # Key column
         header.setSectionResizeMode(1, QHeaderView.Stretch)  # Value column
 
         # Add the table to the layout
-        layout.addWidget(table)
+        layout.addWidget(self.table)
 
         # Close button
         close_button = QPushButton("Close")
-        close_button.clicked.connect(self.close)
+        close_button.clicked.connect(self.on_close)  # Connect close button to custom close handler
         layout.addWidget(close_button)
 
         self.setLayout(layout)
 
+    def on_close(self):
+        """Handle the dialog close event by emitting the updated data."""
+        updated_data = self.get_updated_data_from_table()
+        self.dataUpdated.emit(updated_data)  # Emit the updated data as a dictionary
+        self.close()
+
+    def get_updated_data_from_table(self):
+        """Convert the table back into a dictionary with any changes made."""
+        updated_data = {}
+        for row in range(self.table.rowCount()):
+            key = self.table.item(row, 0).text()  # Get the key (read-only)
+            value = self.table.item(row, 1).text()  # Get the updated value
+            updated_data[key] = value  # Update the dictionary
+        return updated_data
 
 # Main function to run the application
 def main():
