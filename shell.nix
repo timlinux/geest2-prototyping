@@ -54,6 +54,7 @@ pkgs.mkShell {
     echo "./infer_schema.py - parse the model.json and generate a jsonschema document saved as schema.json"
     echo "./app.py - view the model.json in a Qt5 tree view"
     echo "./run.sh - Run all of the above in sequence"
+    echo "./run-tests.sh" - Run the test suite
   '';
 }
 
