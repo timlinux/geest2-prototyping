@@ -7,3 +7,4 @@ schema.json
 .~*
 app2.py
 export.json
+__pycache__

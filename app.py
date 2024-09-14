@@ -3,7 +3,10 @@
 import sys
 import os
 import json
-from PyQt5.QtWidgets import (
+# Change to this when implementing in QGIS
+#from qgis.PyQt.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
+    QAbstractItemDelegate,
     QApplication,
     QTreeView,
     QMainWindow,
@@ -22,6 +25,8 @@ from PyQt5.QtWidgets import (
     QLabel,
     QTextEdit,
 )
+# Change to this when implementing in QGIS
+#from qgis.PyQt.QtCore import (
 from PyQt5.QtCore import (
     QAbstractItemModel,
     QModelIndex,
@@ -29,10 +34,14 @@ from PyQt5.QtCore import (
     QFileSystemWatcher,
     QPoint,
     QEvent,
+    QTimer,
+    pyqtSignal, 
+    Qt
 )
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QAbstractItemDelegate
+# Change to this when implementing in QGIS
+#from qgis.PyQt.QtGui import (
+from PyQt5.QtGui import QColor, QColor, QMovie
+
 
 
 class JsonTreeItem:
@@ -460,14 +469,20 @@ class MainWindow(QMainWindow):
         add_dimension_button = QPushButton("⭐️ Add Dimension")
         add_dimension_button.clicked.connect(self.add_dimension)
 
-        load_json_button = QPushButton("📂 Load JSON")
+        load_json_button = QPushButton("📂 Load Template")
         load_json_button.clicked.connect(self.load_json_from_file)
 
-        export_json_button = QPushButton("🫙 Export JSON")
+        export_json_button = QPushButton("📦️ Save Template")
         export_json_button.clicked.connect(self.export_json_to_file)
 
         button_bar.addWidget(add_dimension_button)
         button_bar.addStretch()
+        
+        prepare_button = QPushButton("🛸 Prepare")
+        prepare_button.clicked.connect(self.process_leaves)
+        button_bar.addWidget(prepare_button)
+        button_bar.addStretch()
+        
         button_bar.addWidget(load_json_button)
         button_bar.addWidget(export_json_button)
         button_bar.addStretch()
@@ -583,6 +598,86 @@ class MainWindow(QMainWindow):
         dialog = LayerDetailDialog(layer_name, layer_data, self)
         dialog.exec_()
 
+    def process_leaves(self):
+        """
+        This function processes all the leaf nodes in the QTreeView.
+        Each leaf node is processed by changing its text to red, showing an animated icon, 
+        waiting for 2 seconds, and then reverting the text color back to black.
+        """
+        model = self.treeView.model()  # Get the model from the tree_view
+
+        # Find all leaf nodes
+        leaf_nodes = []
+        
+        def find_leaves(index):
+            """Recursively find all leaf nodes starting from the given index."""
+            if model.hasChildren(index):
+                for row in range(model.rowCount(index)):
+                    child_index = model.index(row, 0, index)
+                    find_leaves(child_index)
+            else:
+                leaf_nodes.append(index)
+
+        # Populate the leaf_nodes list
+        # Start from the root index of the model
+        root_index = model.index(0, 0)
+        for row in range(model.rowCount()):
+            find_leaves(model.index(row, 0, root_index))
+
+        # Process each leaf node
+        self.process_each_leaf(leaf_nodes, 0)
+
+    def process_each_leaf(self, leaf_nodes, index):
+        """
+        Processes each leaf node by changing the text to red, showing an animated icon,
+        waiting for 2 seconds, and then reverting the text color to black.
+        """
+        # Base case: if all nodes are processed, return
+        if index >= len(leaf_nodes):
+            return
+
+        # Get the current leaf node index
+        node_index = leaf_nodes[index]
+        model = self.treeView.model()
+
+        # Change text color to red to indicate processing
+        model.setData(node_index, QColor(Qt.red), Qt.ForegroundRole)
+
+        # Set an animated icon (using a QLabel and QMovie to simulate animation)
+        movie = QMovie("throbber.gif")  # Use a valid path to an animated gif
+        # Get the height of the current row
+        row_height = self.treeView.rowHeight(node_index)
+        # Scale the movie to the row height
+        movie.setScaledSize(movie.currentPixmap().size().scaled(row_height, row_height, Qt.KeepAspectRatio))
+        
+        label = QLabel()
+        label.setMovie(movie)
+        movie.start()
+
+        # Set the animated icon in the first column of the node
+        self.treeView.setIndexWidget(node_index, label)
+
+        # Wait for 2 seconds to simulate processing
+        QTimer.singleShot(2000, lambda: self.finish_processing(
+            node_index, leaf_nodes, index, movie))
+
+
+    def finish_processing(self, node_index, leaf_nodes, index, movie):
+        """
+        Finishes processing by reverting text color to black and removing the animated icon.
+        Then it proceeds to the next node.
+        """
+        model = self.treeView.model()
+        # Stop the animation and remove the animated icon
+        movie.stop()
+        self.treeView.setIndexWidget(node_index, None)
+
+        # Change text color back to black after processing
+        model.setData(node_index, QColor(Qt.black), Qt.ForegroundRole)
+
+        # Move to the next node
+        self.process_each_leaf(leaf_nodes, index + 1)
+
 
 class LayerDetailDialog(QDialog):
     """Dialog to show layer properties."""
@@ -655,6 +750,7 @@ class LayerDetailDialog(QDialog):
             value = self.table.item(row, 1).text()  # Get the updated value
             updated_data[key] = value  # Update the dictionary
         return updated_data
+
 
 # Main function to run the application
 def main():
