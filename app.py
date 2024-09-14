@@ -640,9 +640,8 @@ class MainWindow(QMainWindow):
         node_index = leaf_nodes[index]
         model = self.treeView.model()
 
-        # Change text color to red to indicate processing
-        model.setData(node_index, QColor(Qt.red), Qt.ForegroundRole)
-
+        # Create a QModelIndex for the second column of the current row
+        second_column_index = model.index(node_index.row(), 1, node_index.parent())
         # Set an animated icon (using a QLabel and QMovie to simulate animation)
         movie = QMovie("throbber.gif")  # Use a valid path to an animated gif
         # Get the height of the current row
@@ -654,15 +653,14 @@ class MainWindow(QMainWindow):
         label.setMovie(movie)
         movie.start()
 
-        # Set the animated icon in the first column of the node
-        self.treeView.setIndexWidget(node_index, label)
-
+        # Set the animated icon in the second column of the node
+        self.treeView.setIndexWidget(second_column_index, label)
         # Wait for 2 seconds to simulate processing
         QTimer.singleShot(2000, lambda: self.finish_processing(
-            node_index, leaf_nodes, index, movie))
+            second_column_index, leaf_nodes, index, movie))
 
 
-    def finish_processing(self, node_index, leaf_nodes, index, movie):
+    def finish_processing(self, second_column_index, leaf_nodes, index, movie):
         """
         Finishes processing by reverting text color to black and removing the animated icon.
         Then it proceeds to the next node.
@@ -670,10 +668,7 @@ class MainWindow(QMainWindow):
         model = self.treeView.model()
         # Stop the animation and remove the animated icon
         movie.stop()
-        self.treeView.setIndexWidget(node_index, None)
-
-        # Change text color back to black after processing
-        model.setData(node_index, QColor(Qt.black), Qt.ForegroundRole)
+        self.treeView.setIndexWidget(second_column_index, None)
 
         # Move to the next node
         self.process_each_leaf(leaf_nodes, index + 1)
